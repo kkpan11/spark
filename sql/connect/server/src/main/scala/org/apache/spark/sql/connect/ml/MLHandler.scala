@@ -24,10 +24,10 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
-import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -54,9 +54,6 @@ private class AttributeHelper(
   def getAttribute: Any = {
     assert(methods.length >= 1)
     methods.foldLeft(instance()) { (obj, m) =>
-      if (obj.isInstanceOf[Summary]) {
-        sessionHolder.mlCache.checkSummaryAvail()
-      }
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -120,11 +117,22 @@ private[connect] object MLHandler extends Logging {
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
+    val memoryControlEnabled = sessionHolder.mlCache.getMemoryControlEnabled
+
+    if (memoryControlEnabled) {
+      val maxModelSize = sessionHolder.mlCache.getModelMaxSize
+
+      // Note: Tree training stops early when the growing tree model exceeds
+      //  `TreeConfig.trainingEarlyStopModelSizeThresholdInBytes`, to ensure the final
+      // model size is lower than `maxModelSize`, set early-stop threshold to
+      // half of `maxModelSize`, because in each tree training iteration, the tree
+      // nodes will grow up to 2 times, the additional 0.5 is for buffer
+      // because the in-memory size is not exactly in direct proportion to the tree nodes.
+      TreeConfig.trainingEarlyStopModelSizeThresholdInBytes = (maxModelSize.toDouble / 2.5).toLong
+    }
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
-        val offloadingEnabled = sessionHolder.session.conf.get(
-          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED)
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
@@ -132,7 +140,14 @@ private[connect] object MLHandler extends Logging {
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
-        if (offloadingEnabled) {
+
+        if (memoryControlEnabled) {
+          try {
+            val estimatedModelSize = estimator.estimateModelSize(dataset)
+            mlCache.checkModelSize(estimatedModelSize)
+          } catch {
+            case _: UnsupportedOperationException => ()
+          }
           if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
             throw MlUnsupportedException(
               "FPGrowth algorithm is not supported " +
@@ -226,9 +241,6 @@ private[connect] object MLHandler extends Logging {
           case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model
             val objId = mlCommand.getWrite.getObjRef.getId
             val model = mlCache.get(objId).asInstanceOf[Model[_]]
-            if (model == null) {
-              throw MLCacheInvalidException(s"model $objId")
-            }
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
