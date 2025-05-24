@@ -141,15 +141,20 @@ function get_release_info {
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
 
   RC_COUNT=$(read_config "RC #" "$RC_COUNT")
+  if [ -n "$SPARK_RC_COUNT" ]; then
+    RC_COUNT=$SPARK_RC_COUNT
+  fi
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
   SKIP_TAG="${SKIP_TAG:-0}"
   if check_for_tag "$RELEASE_TAG" && [[ $SKIP_TAG = 0 ]]; then
     if [ -z "$ANSWER" ]; then
-      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
-    fi
-    if [ "$ANSWER" != "y" ]; then
+      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " userinput
+      if [ "$userinput" != "y" ]; then
+        error "Exiting."
+      fi
+    elif [ "$ANSWER" != "y" ]; then
       error "Exiting."
     fi
     SKIP_TAG=1
@@ -198,11 +203,12 @@ E-MAIL:     $GIT_EMAIL
 EOF
 
   if [ -z "$ANSWER" ]; then
-    read -p "Is this info correct [y/n]? " ANSWER
-  fi
-  if [ "$ANSWER" != "y" ]; then
-    echo "Exiting."
-    exit 1
+    read -p "Is this info correct [y/n]? " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
+    error "Exiting."
   fi
 
   if ! is_dry_run; then

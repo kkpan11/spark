@@ -377,6 +377,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runExtendedResolutionChecks")
+      .internal()
+      .doc("When true, run `extendedResolutionChecks` after the main analysis.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS =
+    buildConf("spark.sql.analyzer.singlePassResolver.runHeavyExtendedResolutionChecks")
+      .internal()
+      .doc(
+        "When true, run heavy `extendedResolutionChecks` after the main analysis. Otherwise skip " +
+        "them. Heavy check either involves a network call changing external persistent storage, " +
+        "or changes a global state. For example, `ViewSyncSchemaToMetaStore` calls alter table."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -462,6 +482,14 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .enumConf(classOf[Level])
+    .createWithDefault(Level.TRACE)
+
+  val NAME_RESOLUTION_LOG_LEVEL = buildConf("spark.sql.nameResolutionLog.level")
+    .internal()
+    .doc("Configures the log level for logging the name resolution in the single-pass bottom-up " +
+      s"Resolver. The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
+    .version("4.1.0")
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -920,6 +948,20 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  lazy val SCHEMA_LEVEL_COLLATIONS_ENABLED =
+    buildConf("spark.sql.collation.schemaLevel.enabled")
+      .internal()
+      .doc(
+        "Schema level collations feature is under development and its use should be done " +
+          "under this feature flag. The feature allows setting default collation for all " +
+          "underlying objects within that schema, except the ones that were previously created." +
+          "An object with an explicitly set collation will not inherit the collation from the " +
+          "schema."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
@@ -5996,6 +6038,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
+  def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
+
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
   def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
@@ -6146,6 +6190,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
+
+  def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
 
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 

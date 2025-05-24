@@ -72,9 +72,11 @@ fi
 
 if [ -d "$WORKDIR/output" ]; then
   if [ -z "$ANSWER" ]; then
-    read -p "Output directory already exists. Overwrite and continue? [y/n] " ANSWER
-  fi
-  if [ "$ANSWER" != "y" ]; then
+    read -p "Output directory already exists. Overwrite and continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 fi
@@ -82,9 +84,11 @@ fi
 if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
   echo "THIS STEP IS IRREVERSIBLE! Make sure the vote has passed and you pick the right RC to finalize."
   if [ -z "$ANSWER" ]; then
-    read -p "You must be a PMC member to run this step. Continue? [y/n] " ANSWER
-  fi
-  if [ "$ANSWER" != "y" ]; then
+    read -p "You must be a PMC member to run this step. Continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 
@@ -151,6 +155,9 @@ GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER
 DEBUG_MODE=$DEBUG_MODE
+ANSWER=$ANSWER
+GITHUB_ACTIONS=$GITHUB_ACTIONS
+SPARK_RC_COUNT=$SPARK_RC_COUNT
 EOF
 
 JAVA_VOL=
@@ -160,7 +167,7 @@ if [ -n "$JAVA" ]; then
 fi
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker $([ -z "$GITHUB_ACTIONS" ] && echo "-it") run \
+docker run $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
   --env-file "$ENVFILE" \
   --volume "$WORKDIR:/opt/spark-rm" \
   $JAVA_VOL \
