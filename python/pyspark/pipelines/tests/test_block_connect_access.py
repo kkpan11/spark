@@ -18,12 +18,14 @@ import unittest
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
     connect_requirement_message,
 )
+
+if should_test_connect:
+    from pyspark.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -38,7 +40,7 @@ class BlockSparkConnectAccessTests(ReusedConnectTestCase):
         with block_spark_connect_execution_and_analysis():
             with self.assertRaises(PySparkException) as context:
                 df.schema
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(), "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"
             )
 
@@ -48,7 +50,7 @@ class BlockSparkConnectAccessTests(ReusedConnectTestCase):
         with block_spark_connect_execution_and_analysis():
             with self.assertRaises(PySparkException) as context:
                 df.collect()
-            self.assertEquals(
+            self.assertEqual(
                 context.exception.getCondition(), "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"
             )
 
